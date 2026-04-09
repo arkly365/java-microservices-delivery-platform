@@ -1,0 +1,57 @@
+services:
+  service-a-dev:
+    image: service-a:local
+    container_name: service-a-dev
+    ports:
+      - "127.0.0.1:18081:8080"
+    environment:
+      APP_ENV: dev
+      APP_BRANCH: develop
+      APP_IMAGE_TAG: local
+    restart: unless-stopped
+    networks:
+      - lab-net
+
+  service-b-dev:
+    image: service-b:local
+    container_name: service-b-dev
+    ports:
+      - "127.0.0.1:18083:8080"
+    environment:
+      APP_ENV: dev
+      APP_BRANCH: develop
+      APP_IMAGE_TAG: local
+    restart: unless-stopped
+    networks:
+      - lab-net
+
+  service-a-prod:
+    image: service-a:local
+    container_name: service-a-prod
+    ports:
+      - "127.0.0.1:18082:8080"
+    environment:
+      APP_ENV: prod
+      APP_BRANCH: master
+      APP_IMAGE_TAG: local
+    restart: unless-stopped
+    networks:
+      - lab-net
+
+  service-b-prod:
+    image: service-b:local
+    container_name: service-b-prod
+    ports:
+      - "127.0.0.1:18084:8080"
+    environment:
+      APP_ENV: prod
+      APP_BRANCH: master
+      APP_IMAGE_TAG: local
+    restart: unless-stopped
+    networks:
+      - lab-net
+
+networks:
+  lab-net:
+    external: true
+    name: jenkins-cicd-lab_lab-net

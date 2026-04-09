@@ -1,0 +1,16 @@
+server:
+  port: 8080
+
+app:
+  environment: ${APP_ENV:local}
+  branch: ${APP_BRANCH:unknown}
+  imageTag: ${APP_IMAGE_TAG:unknown}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
