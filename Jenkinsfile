@@ -37,22 +37,22 @@ pipeline {
             }
         }
 
-        stage('Verify hello endpoints') {
-            steps {
-                sh 'curl -f http://host.docker.internal:18081/hello'
-                sh 'curl -f http://host.docker.internal:18083/hello'
-                sh 'curl -f http://host.docker.internal:18082/hello'
-                sh 'curl -f http://host.docker.internal:18084/hello'
-            }
-        }
+		stage('Verify hello endpoints') {
+			steps {
+				sh 'curl -f http://service-a-dev:8080/hello'
+				sh 'curl -f http://service-b-dev:8080/hello'
+				sh 'curl -f http://service-a-prod:8080/hello'
+				sh 'curl -f http://service-b-prod:8080/hello'
+			}
+		}
 
-        stage('Verify health endpoints') {
-            steps {
-                sh 'curl -f http://host.docker.internal:18081/actuator/health'
-                sh 'curl -f http://host.docker.internal:18083/actuator/health'
-                sh 'curl -f http://host.docker.internal:18082/actuator/health'
-                sh 'curl -f http://host.docker.internal:18084/actuator/health'
-            }
-        }
+		stage('Verify health endpoints') {
+			steps {
+				sh 'curl -f http://service-a-dev:8080/actuator/health'
+				sh 'curl -f http://service-b-dev:8080/actuator/health'
+				sh 'curl -f http://service-a-prod:8080/actuator/health'
+				sh 'curl -f http://service-b-prod:8080/actuator/health'
+			}
+		}
     }
 }
