@@ -7,7 +7,7 @@ services:
     environment:
       APP_ENV: prod
       APP_BRANCH: main
-      APP_IMAGE_TAG: local
+      APP_IMAGE_TAG: latest
     restart: unless-stopped
     networks:
       - lab-net
@@ -20,7 +20,7 @@ services:
     environment:
       APP_ENV: prod
       APP_BRANCH: main
-      APP_IMAGE_TAG: local
+      APP_IMAGE_TAG: latest
     restart: unless-stopped
     networks:
       - lab-net
@@ -29,4 +29,3 @@ networks:
   lab-net:
     external: true
     name: jenkins-cicd-lab_lab-net
-    

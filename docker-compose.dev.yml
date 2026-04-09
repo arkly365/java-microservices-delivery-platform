@@ -1,25 +1,25 @@
 services:
-  service-a-prod:
+  service-a-dev:
     image: 127.0.0.1:5000/service-a:latest
-    container_name: service-a-prod
+    container_name: service-a-dev
     ports:
-      - "127.0.0.1:18082:8080"
+      - "127.0.0.1:18081:8080"
     environment:
-      APP_ENV: prod
-      APP_BRANCH: main
+      APP_ENV: dev
+      APP_BRANCH: develop
       APP_IMAGE_TAG: latest
     restart: unless-stopped
     networks:
       - lab-net
 
-  service-b-prod:
+  service-b-dev:
     image: 127.0.0.1:5000/service-b:latest
-    container_name: service-b-prod
+    container_name: service-b-dev
     ports:
-      - "127.0.0.1:18084:8080"
+      - "127.0.0.1:18083:8080"
     environment:
-      APP_ENV: prod
-      APP_BRANCH: main
+      APP_ENV: dev
+      APP_BRANCH: develop
       APP_IMAGE_TAG: latest
     restart: unless-stopped
     networks:
