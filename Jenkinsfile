@@ -4,12 +4,14 @@ pipeline {
     stages {
         stage('Init') {
             steps {
-                echo 'Phase 21.6 branch-based microservices pipeline start'
-                sh 'pwd'
-                sh 'ls -la'
-                sh 'git branch --show-current || true'
-                echo "BRANCH_NAME=${env.BRANCH_NAME}"
-            }
+				echo 'Phase 21.6 branch-based microservices pipeline start'
+				sh 'pwd'
+				sh 'ls -la'
+				sh 'git branch --show-current || true'
+				sh 'git rev-parse --abbrev-ref HEAD || true'
+				echo "BRANCH_NAME=${env.BRANCH_NAME}"
+				echo "GIT_BRANCH=${env.GIT_BRANCH}"
+			}
         }
 
         stage('Build service-a') {
