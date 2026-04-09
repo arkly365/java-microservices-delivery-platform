@@ -27,5 +27,14 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy microservices') {
+            steps {
+                sh '''
+                    docker rm -f service-a-dev service-b-dev service-a-prod service-b-prod || true
+                    docker compose -f docker-compose.deploy.yml up -d
+                '''
+            }
+        }
     }
 }
