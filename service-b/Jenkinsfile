@@ -1,228 +1,127 @@
 pipeline {
     agent any
 
-    parameters {
-        string(name: 'ROLLBACK_TAG', defaultValue: '', description: 'Optional rollback tag, e.g. build-8')
-    }
-
     environment {
-        IMAGE_NAME = 'arkly365/sample-java-app'
-        PRIVATE_REGISTRY_IMAGE = 'localhost:5000/sample-java-app'
+        SERVICE_NAME = 'service-b'
+        REGISTRY = 'localhost:5000'
+        IMAGE_REPO = "${REGISTRY}/service-b"
+
+        DEV_PORT  = '18082'
+        PROD_PORT = '28082'
+
+        DEV_CONTAINER  = 'service-b-dev'
+        PROD_CONTAINER = 'service-b-prod'
     }
 
     stages {
-	
-		stage('Init') {
-			steps {
-				echo 'Pipeline started'
-				echo "Branch = ${env.BRANCH_NAME}"
-				echo "ROLLBACK_TAG = ${params.ROLLBACK_TAG}"
-			}
-		}
+        stage('Init') {
+            steps {
+                echo "Pipeline started"
+                echo "Branch = ${env.BRANCH_NAME}"
+            }
+        }
 
         stage('Check Tools') {
             steps {
                 sh 'git --version'
                 sh 'mvn -version'
                 sh 'docker --version'
-                sh 'docker-compose version'
+                sh 'docker compose version'
             }
         }
 
-        stage('Maven Test') {
-            when {
-                expression { return !params.ROLLBACK_TAG?.trim() }
-            }
+        stage('Build Jar') {
             steps {
-                sh 'mvn clean test'
-            }
-        }
-
-        stage('SonarQube Scan') {
-            when {
-                expression { return !params.ROLLBACK_TAG?.trim() }
-            }
-            steps {
-                withSonarQubeEnv('sonarqube-local') {
-                    sh '''
-                        mvn sonar:sonar \
-                          -Dsonar.projectKey=sample-java-app \
-                          -Dsonar.projectName=sample-java-app
-                    '''
+                dir('service-b') {
+                    sh 'mvn clean package -DskipTests'
                 }
-            }
-        }
-
-        stage('Maven Package') {
-            when {
-                expression { return !params.ROLLBACK_TAG?.trim() }
-            }
-            steps {
-                sh 'mvn clean package -DskipTests'
             }
         }
 
         stage('Docker Build') {
-            when {
-                expression { return !params.ROLLBACK_TAG?.trim() }
-            }
             steps {
-                sh 'docker build -t sample-java-app:build-${BUILD_NUMBER} .'
-            }
-        }
-
-        stage('Trivy Report') {
-            when {
-                expression { return !params.ROLLBACK_TAG?.trim() }
-            }
-            steps {
-                sh '''
-                    docker run --rm \
-                      -v /var/run/docker.sock:/var/run/docker.sock \
-                      -v trivy_cache:/root/.cache/ \
-                      aquasec/trivy:0.62.0 image \
-                      --scanners vuln \
-                      --severity HIGH,CRITICAL \
-                      --ignore-unfixed \
-                      --no-progress \
-                      --format table \
-                      --exit-code 0 \
-                      sample-java-app:build-${BUILD_NUMBER} \
-                      > trivy-image-report.txt
-                '''
-                sh 'test -f trivy-image-report.txt'
-            }
-        }
-
-        stage('Push to Private Registry') {
-            when {
-                expression { return !params.ROLLBACK_TAG?.trim() }
-            }
-            steps {
-                script {
-                    def stableTag = (env.BRANCH_NAME == 'master') ? 'master-latest' : 'develop-latest'
-
-                    sh """
-                        docker tag sample-java-app:build-${BUILD_NUMBER} ${PRIVATE_REGISTRY_IMAGE}:build-${BUILD_NUMBER}
-                        docker tag sample-java-app:build-${BUILD_NUMBER} ${PRIVATE_REGISTRY_IMAGE}:${stableTag}
-
-                        docker push ${PRIVATE_REGISTRY_IMAGE}:build-${BUILD_NUMBER}
-                        docker push ${PRIVATE_REGISTRY_IMAGE}:${stableTag}
-                    """
+                dir('service-b') {
+                    sh 'docker build -t service-b:ci-${BUILD_NUMBER} .'
                 }
             }
         }
 
-		stage('Deploy with Docker Compose') {
-			steps {
-				script {
-					def deployTag
-					def composeFile
-					def verifyUrl
+        stage('Push Registry') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'develop') {
+                        sh '''
+                            docker tag service-b:ci-${BUILD_NUMBER} ${IMAGE_REPO}:dev-latest
+                            docker push ${IMAGE_REPO}:dev-latest
+                        '''
+                    } else if (env.BRANCH_NAME == 'main') {
+                        sh '''
+                            docker tag service-b:ci-${BUILD_NUMBER} ${IMAGE_REPO}:prod-latest
+                            docker push ${IMAGE_REPO}:prod-latest
+                        '''
+                    } else {
+                        echo "Skip push: unsupported branch ${env.BRANCH_NAME}"
+                    }
+                }
+            }
+        }
 
-					if (params.ROLLBACK_TAG?.trim()) {
-						deployTag = params.ROLLBACK_TAG.trim()
-					} else {
-						deployTag = (env.BRANCH_NAME == 'master') ? 'master-latest' : 'develop-latest'
-					}
+        stage('Deploy Dev') {
+            when {
+                branch 'develop'
+            }
+            steps {
+                sh '''
+                    docker rm -f ${DEV_CONTAINER} || true
 
-					if (env.BRANCH_NAME == 'master') {
-						composeFile = 'deploy/docker-compose.prod.yml'
-						verifyUrl = 'http://host.docker.internal:8082/hello'
-					} else if (env.BRANCH_NAME == 'develop') {
-						composeFile = 'deploy/docker-compose.dev.yml'
-						verifyUrl = 'http://host.docker.internal:8081/hello'
-					} else {
-						echo "Skip deploy for branch: ${env.BRANCH_NAME}"
-						return
-					}
+                    docker run -d \
+                      --name ${DEV_CONTAINER} \
+                      -p ${DEV_PORT}:8080 \
+                      ${IMAGE_REPO}:dev-latest
+                '''
+            }
+        }
 
-					echo "Deploy tag = ${deployTag}"
-					echo "Compose file = ${composeFile}"
-					echo "Verify URL = ${verifyUrl}"
+        stage('Verify Dev') {
+            when {
+                branch 'develop'
+            }
+            steps {
+                sh '''
+                    sleep 10
+                    curl -f http://host.docker.internal:${DEV_PORT}/hello
+                    curl -f http://host.docker.internal:${DEV_PORT}/actuator/health
+                '''
+            }
+        }
 
-					sh """
-						export IMAGE_TAG='${deployTag}'
-						export APP_BRANCH='${env.BRANCH_NAME}'
-						docker-compose -f ${composeFile} up -d --remove-orphans
-					"""
-				}
-			}
-		}
+        stage('Deploy Prod') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh '''
+                    docker rm -f ${PROD_CONTAINER} || true
 
-		stage('Verify Deployment') {
-			steps {
-				script {
-					if (env.BRANCH_NAME == 'master') {
-						sh '''
-							for i in 1 2 3 4 5; do
-							  echo "Verify attempt $i"
-							  curl -f http://host.docker.internal:8082/hello && \
-							  curl -f http://host.docker.internal:8082/version && exit 0
-							  sleep 5
-							done
-							exit 1
-						'''
-					} else if (env.BRANCH_NAME == 'develop') {
-						sh '''
-							for i in 1 2 3 4 5; do
-							  echo "Verify attempt $i"
-							  curl -f http://host.docker.internal:8081/hello && \
-							  curl -f http://host.docker.internal:8081/version && exit 0
-							  sleep 5
-							done
-							exit 1
-						'''
-					} else {
-						echo "Skip verify for branch: ${env.BRANCH_NAME}"
-					}
-				}
-			}
-		}
+                    docker run -d \
+                      --name ${PROD_CONTAINER} \
+                      -p ${PROD_PORT}:8080 \
+                      ${IMAGE_REPO}:prod-latest
+                '''
+            }
+        }
 
-		
-		stage('OWASP ZAP Baseline Scan') {
-			steps {
-				script {
-					def targetUrl = ''
-					def reportFile = ''
-
-					if (env.BRANCH_NAME == 'master') {
-						targetUrl = 'http://host.docker.internal:8082/hello'
-						reportFile = 'zap-baseline-prod.txt'
-					} else if (env.BRANCH_NAME == 'develop') {
-						targetUrl = 'http://host.docker.internal:8081/hello'
-						reportFile = 'zap-baseline-dev.txt'
-					} else {
-						echo "Skip ZAP scan for branch: ${env.BRANCH_NAME}"
-						return
-					}
-
-					echo "ZAP target = ${targetUrl}"
-
-					sh """
-						docker run --rm \
-						  --user root \
-						  -v "$WORKSPACE:/zap/wrk" \
-						  ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-						  -t ${targetUrl} \
-						  -m 1 \
-						  2>&1 | tee ${reportFile} || true
-					"""
-
-					sh 'ls -la'
-					sh 'test -f ${reportFile}'
-				}
-			}
-		}
-		
-        
-    }
-
-    post {
-        always {
-			archiveArtifacts artifacts: 'trivy-image-report.txt, zap-baseline-*.txt', fingerprint: true, allowEmptyArchive: true
-		}
-		
+        stage('Verify Prod') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh '''
+                    sleep 10
+                    curl -f http://host.docker.internal:${PROD_PORT}/hello
+                    curl -f http://host.docker.internal:${PROD_PORT}/actuator/health
+                '''
+            }
+        }
     }
 }
