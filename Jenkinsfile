@@ -4,14 +4,11 @@ pipeline {
     stages {
         stage('Init') {
             steps {
-				echo 'Phase 21.6 branch-based microservices pipeline start'
-				sh 'pwd'
-				sh 'ls -la'
-				sh 'git branch --show-current || true'
-				sh 'git rev-parse --abbrev-ref HEAD || true'
-				echo "BRANCH_NAME=${env.BRANCH_NAME}"
-				echo "GIT_BRANCH=${env.GIT_BRANCH}"
-			}
+                echo 'Phase 22 microservices pipeline with private registry start'
+                sh 'pwd'
+                sh 'ls -la'
+                echo "BRANCH_NAME=${env.BRANCH_NAME}"
+            }
         }
 
         stage('Build service-a') {
@@ -29,6 +26,24 @@ pipeline {
                     sh 'mvn clean package -DskipTests'
                     sh 'docker build -t service-b:local .'
                 }
+            }
+        }
+
+        stage('Push service-a to private registry') {
+            steps {
+                sh '''
+                    docker tag service-a:local 127.0.0.1:5000/service-a:latest
+                    docker push 127.0.0.1:5000/service-a:latest
+                '''
+            }
+        }
+
+        stage('Push service-b to private registry') {
+            steps {
+                sh '''
+                    docker tag service-b:local 127.0.0.1:5000/service-b:latest
+                    docker push 127.0.0.1:5000/service-b:latest
+                '''
             }
         }
 

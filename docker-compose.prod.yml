@@ -1,6 +1,6 @@
 services:
   service-a-prod:
-    image: service-a:local
+    image: 127.0.0.1:5000/service-a:latest
     container_name: service-a-prod
     ports:
       - "127.0.0.1:18082:8080"
@@ -13,7 +13,7 @@ services:
       - lab-net
 
   service-b-prod:
-    image: service-b:local
+    image: 127.0.0.1:5000/service-b:latest
     container_name: service-b-prod
     ports:
       - "127.0.0.1:18084:8080"
