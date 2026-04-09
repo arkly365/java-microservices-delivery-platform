@@ -39,20 +39,49 @@ pipeline {
 
 		stage('Verify hello endpoints') {
 			steps {
-				sh 'curl -f http://service-a-dev:8080/hello'
-				sh 'curl -f http://service-b-dev:8080/hello'
-				sh 'curl -f http://service-a-prod:8080/hello'
-				sh 'curl -f http://service-b-prod:8080/hello'
+				sh '''
+					for url in \
+					  http://service-a-dev:8080/hello \
+					  http://service-b-dev:8080/hello \
+					  http://service-a-prod:8080/hello \
+					  http://service-b-prod:8080/hello
+					do
+					  echo "Checking $url"
+					  for i in 1 2 3 4 5 6 7 8 9 10
+					  do
+						curl -f "$url" && break
+						echo "Retry $i for $url..."
+						sleep 5
+					  done
+					  curl -f "$url"
+					done
+				'''
 			}
 		}
 
 		stage('Verify health endpoints') {
 			steps {
-				sh 'curl -f http://service-a-dev:8080/actuator/health'
-				sh 'curl -f http://service-b-dev:8080/actuator/health'
-				sh 'curl -f http://service-a-prod:8080/actuator/health'
-				sh 'curl -f http://service-b-prod:8080/actuator/health'
+				sh '''
+					for url in \
+					  http://service-a-dev:8080/actuator/health \
+					  http://service-b-dev:8080/actuator/health \
+					  http://service-a-prod:8080/actuator/health \
+					  http://service-b-prod:8080/actuator/health
+					do
+					  echo "Checking $url"
+					  for i in 1 2 3 4 5 6 7 8 9 10
+					  do
+						curl -f "$url" && break
+						echo "Retry $i for $url..."
+						sleep 5
+					  done
+					  curl -f "$url"
+					done
+				'''
 			}
 		}
+		
+		
+		
     }
 }
