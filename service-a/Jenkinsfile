@@ -159,7 +159,7 @@ pipeline {
 						  -u root \
 						  --network host \
 						  -v "$PWD:/zap/wrk" \
-						  ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+						  owasp/zap2docker-stable zap-baseline.py \
 						  -t http://host.docker.internal:18081 \
 						  -J zap-report-dev.json \
 						  -r zap-report-dev.html \
