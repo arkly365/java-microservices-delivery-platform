@@ -156,6 +156,7 @@ pipeline {
 				dir('service-a') {
 					sh '''
 						docker run --rm \
+						  -u root \
 						  --network host \
 						  -v "$PWD:/zap/wrk" \
 						  ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
