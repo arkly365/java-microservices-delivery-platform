@@ -158,19 +158,22 @@ pipeline {
 						rm -f zap-report-dev.html zap-report-dev.json || true
 						docker rm -f zap-service-a-dev-scan || true
 
-						docker run --name zap-service-a-dev-scan \
+						docker create --name zap-service-a-dev-scan \
 						  --network host \
 						  zaproxy/zap-stable \
 						  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r /zap/wrk/zap-report-dev.html -J /zap/wrk/zap-report-dev.json -I"
+
+						docker start -a zap-service-a-dev-scan
+
+						docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
+						docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
+
+						docker rm -f zap-service-a-dev-scan || true
+
+						ls -la
+						test -f zap-report-dev.html
+						test -f zap-report-dev.json
 					'''
-
-					sh 'docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html'
-					sh 'docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json'
-					sh 'docker rm -f zap-service-a-dev-scan || true'
-
-					sh 'ls -la'
-					sh 'test -f zap-report-dev.html'
-					sh 'test -f zap-report-dev.json'
 				}
 			}
 		}
@@ -206,8 +209,8 @@ pipeline {
     }
 	
 	post {
-		always {
-			archiveArtifacts artifacts: 'service-a/trivy-image-report.txt, service-a/zap-report-dev.html, service-a/zap-report-dev.json', fingerprint: true
-		}
+		    always {
+				archiveArtifacts artifacts: 'service-a/trivy-image-report.txt, service-a/zap-report-dev.html, service-a/zap-report-dev.json', fingerprint: true
+			}
 	}
 }
