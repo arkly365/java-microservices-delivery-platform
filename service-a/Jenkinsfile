@@ -75,6 +75,29 @@ pipeline {
                 }
             }
         }
+		
+		stage('Trivy Report') {
+			steps {
+				dir('service-a') {
+					sh '''
+						docker run --rm \
+						  -v /var/run/docker.sock:/var/run/docker.sock \
+						  -v trivy_cache:/root/.cache/ \
+						  aquasec/trivy:0.62.0 image \
+						  --scanners vuln \
+						  --severity HIGH,CRITICAL \
+						  --ignore-unfixed \
+						  --no-progress \
+						  --format table \
+						  --exit-code 0 \
+						  service-a:ci-${BUILD_NUMBER} \
+						  > trivy-image-report.txt
+					'''
+					sh 'ls -la'
+					sh 'test -f trivy-image-report.txt'
+				}
+			}
+		}
 
         stage('Push Registry') {
             steps {
@@ -154,4 +177,10 @@ pipeline {
             }
         }
     }
+	
+	post {
+		always {
+			archiveArtifacts artifacts: 'service-a/trivy-image-report.txt', fingerprint: true
+		}
+	}
 }
