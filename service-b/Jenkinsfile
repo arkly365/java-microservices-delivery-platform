@@ -30,7 +30,37 @@ pipeline {
             }
         }
 
-        stage('Build Jar') {
+        stage('Maven Test') {
+            steps {
+                dir('service-b') {
+                    sh 'mvn clean test'
+                }
+            }
+        }
+
+        stage('SonarQube Scan') {
+            steps {
+                dir('service-b') {
+                    withSonarQubeEnv('sonarqube-local') {
+                        sh '''
+                            mvn sonar:sonar \
+                              -Dsonar.projectKey=service-b \
+                              -Dsonar.projectName=service-b
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Maven Package') {
             steps {
                 dir('service-b') {
                     sh 'mvn clean package -DskipTests'
