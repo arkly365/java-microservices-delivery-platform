@@ -148,36 +148,6 @@ pipeline {
             }
         }
 		
-		stage('OWASP ZAP Baseline Scan') {
-			when {
-				branch 'develop'
-			}
-			steps {
-				dir('service-a') {
-					sh '''
-						rm -f zap-report-dev.html zap-report-dev.json || true
-						docker rm -f zap-service-a-dev-scan || true
-
-						docker create --name zap-service-a-dev-scan \
-						  --network host \
-						  zaproxy/zap-stable \
-						  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r zap-report-dev.html -J zap-report-dev.json -I"
-
-						docker start -a zap-service-a-dev-scan
-
-						docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
-						docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
-
-						docker rm -f zap-service-a-dev-scan || true
-
-						ls -la
-						test -f zap-report-dev.html
-						test -f zap-report-dev.json
-					'''
-				}
-			}
-		}
-
         stage('Deploy Prod') {
             when {
                 branch 'main'
@@ -206,11 +176,66 @@ pipeline {
                 '''
             }
         }
+		
+		
+		stage('OWASP ZAP Baseline Scan') {
+			steps {
+				script {
+					if (env.BRANCH_NAME == 'develop') {
+						dir('service-a') {
+							sh '''
+								rm -f zap-report-dev.html zap-report-dev.json || true
+								docker rm -f zap-service-a-dev-scan || true
+
+								docker create --name zap-service-a-dev-scan \
+								  --network host \
+								  zaproxy/zap-stable \
+								  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r zap-report-dev.html -J zap-report-dev.json -I"
+
+								docker start -a zap-service-a-dev-scan
+								docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
+								docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
+								docker rm -f zap-service-a-dev-scan || true
+
+								ls -la
+								test -f zap-report-dev.html
+								test -f zap-report-dev.json
+							'''
+						}
+					} else if (env.BRANCH_NAME == 'main') {
+						dir('service-a') {
+							sh '''
+								rm -f zap-report-prod.html zap-report-prod.json || true
+								docker rm -f zap-service-a-prod-scan || true
+
+								docker create --name zap-service-a-prod-scan \
+								  --network host \
+								  zaproxy/zap-stable \
+								  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:28081 -r zap-report-prod.html -J zap-report-prod.json -I"
+
+								docker start -a zap-service-a-prod-scan
+								docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.html ./zap-report-prod.html
+								docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.json ./zap-report-prod.json
+								docker rm -f zap-service-a-prod-scan || true
+
+								ls -la
+								test -f zap-report-prod.html
+								test -f zap-report-prod.json
+							'''
+						}
+					} else {
+						echo "Skip ZAP scan for branch ${env.BRANCH_NAME}"
+					}
+				}
+			}
+		}
+		
+		
     }
 	
 	post {
-		    always {
-				archiveArtifacts artifacts: 'service-a/trivy-image-report.txt, service-a/zap-report-dev.html, service-a/zap-report-dev.json', fingerprint: true
+			always {
+				archiveArtifacts artifacts: 'service-a/trivy-image-report.txt, service-a/zap-report-dev.html, service-a/zap-report-dev.json, service-a/zap-report-prod.html, service-a/zap-report-prod.json', fingerprint: true
 			}
 	}
 }
