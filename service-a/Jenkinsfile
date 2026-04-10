@@ -156,9 +156,8 @@ pipeline {
 				sh '''
 					docker run --rm \
 					  --network host \
-					  zaproxy/zap-stable zap-baseline.py \
-					  -t http://host.docker.internal:18081 \
-					  -I
+					  zaproxy/zap-stable \
+					  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -I"
 				'''
 			}
 		}
