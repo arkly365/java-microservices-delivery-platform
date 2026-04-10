@@ -99,25 +99,31 @@ pipeline {
             }
         }
 
-        stage('Push Registry') {
-            steps {
-                script {
-                    if (env.BRANCH_NAME == 'develop') {
-                        sh '''
-                            docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:dev-latest
-                            docker push ${IMAGE_REPO}:dev-latest
-                        '''
-                    } else if (env.BRANCH_NAME == 'main') {
-                        sh '''
-                            docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:prod-latest
-                            docker push ${IMAGE_REPO}:prod-latest
-                        '''
-                    } else {
-                        echo "Skip push: unsupported branch ${env.BRANCH_NAME}"
-                    }
-                }
-            }
-        }
+		stage('Push Registry') {
+			steps {
+				script {
+					if (env.BRANCH_NAME == 'develop') {
+						sh '''
+							docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:build-dev-${BUILD_NUMBER}
+							docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:dev-latest
+
+							docker push ${IMAGE_REPO}:build-dev-${BUILD_NUMBER}
+							docker push ${IMAGE_REPO}:dev-latest
+						'''
+					} else if (env.BRANCH_NAME == 'main') {
+						sh '''
+							docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:build-prod-${BUILD_NUMBER}
+							docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:prod-latest
+
+							docker push ${IMAGE_REPO}:build-prod-${BUILD_NUMBER}
+							docker push ${IMAGE_REPO}:prod-latest
+						'''
+					} else {
+						echo "Skip push: unsupported branch ${env.BRANCH_NAME}"
+					}
+				}
+			}
+		}
 
         stage('Deploy Dev') {
             when {
