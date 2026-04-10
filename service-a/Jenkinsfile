@@ -161,7 +161,7 @@ pipeline {
 						docker create --name zap-service-a-dev-scan \
 						  --network host \
 						  zaproxy/zap-stable \
-						  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r /zap/wrk/zap-report-dev.html -J /zap/wrk/zap-report-dev.json -I"
+						  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r zap-report-dev.html -J zap-report-dev.json -I"
 
 						docker start -a zap-service-a-dev-scan
 
