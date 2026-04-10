@@ -153,12 +153,25 @@ pipeline {
 				branch 'develop'
 			}
 			steps {
-				sh '''
-					docker run --rm \
-					  --network host \
-					  zaproxy/zap-stable \
-					  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -I"
-				'''
+				dir('service-a') {
+					sh '''
+						rm -f zap-report-dev.html zap-report-dev.json || true
+						docker rm -f zap-service-a-dev-scan || true
+
+						docker run --name zap-service-a-dev-scan \
+						  --network host \
+						  zaproxy/zap-stable \
+						  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r /zap/wrk/zap-report-dev.html -J /zap/wrk/zap-report-dev.json -I"
+					'''
+
+					sh 'docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html'
+					sh 'docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json'
+					sh 'docker rm -f zap-service-a-dev-scan || true'
+
+					sh 'ls -la'
+					sh 'test -f zap-report-dev.html'
+					sh 'test -f zap-report-dev.json'
+				}
 			}
 		}
 
