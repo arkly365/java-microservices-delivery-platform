@@ -3,8 +3,8 @@ pipeline {
 
     environment {
         SERVICE_NAME = 'service-b'
-        REGISTRY = 'localhost:5000'
-        IMAGE_REPO = "${REGISTRY}/service-b"
+        REGISTRY     = 'localhost:5000'
+        IMAGE_REPO   = "${REGISTRY}/service-b"
 
         DEV_PORT  = '18082'
         PROD_PORT = '28082'
@@ -75,29 +75,29 @@ pipeline {
                 }
             }
         }
-		
-		stage('Trivy Report') {
-			steps {
-				dir('service-b') {
-					sh '''
-						docker run --rm \
-						  -v /var/run/docker.sock:/var/run/docker.sock \
-						  -v trivy_cache:/root/.cache/ \
-						  aquasec/trivy:0.62.0 image \
-						  --scanners vuln \
-						  --severity HIGH,CRITICAL \
-						  --ignore-unfixed \
-						  --no-progress \
-						  --format table \
-						  --exit-code 0 \
-						  service-b:ci-${BUILD_NUMBER} \
-						  > trivy-image-report.txt
-					'''
-					sh 'ls -la'
-					sh 'test -f trivy-image-report.txt'
-				}
-			}
-		}
+
+        stage('Trivy Report') {
+            steps {
+                dir('service-b') {
+                    sh '''
+                        docker run --rm \
+                          -v /var/run/docker.sock:/var/run/docker.sock \
+                          -v trivy_cache:/root/.cache/ \
+                          aquasec/trivy:0.62.0 image \
+                          --scanners vuln \
+                          --severity HIGH,CRITICAL \
+                          --ignore-unfixed \
+                          --no-progress \
+                          --format table \
+                          --exit-code 0 \
+                          service-b:ci-${BUILD_NUMBER} \
+                          > trivy-image-report.txt
+                    '''
+                    sh 'ls -la'
+                    sh 'test -f trivy-image-report.txt'
+                }
+            }
+        }
 
         stage('Push Registry') {
             steps {
@@ -176,64 +176,71 @@ pipeline {
                 '''
             }
         }
-		
-		stage('OWASP ZAP Baseline Scan') {
-			steps {
-				script {
-					if (env.BRANCH_NAME == 'develop') {
-						dir('service-a') {
-							sh '''
-								rm -f zap-report-dev.html zap-report-dev.json || true
-								docker rm -f zap-service-a-dev-scan || true
 
-								docker create --name zap-service-a-dev-scan \
-								  --network host \
-								  zaproxy/zap-stable \
-								  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r zap-report-dev.html -J zap-report-dev.json -I"
+        stage('OWASP ZAP Baseline Scan') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'develop') {
+                        dir('service-b') {
+                            sh '''
+                                rm -f zap-report-dev.html zap-report-dev.json || true
+                                docker rm -f zap-service-b-dev-scan || true
 
-								docker start -a zap-service-a-dev-scan
-								docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
-								docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
-								docker rm -f zap-service-a-dev-scan || true
+                                docker create --name zap-service-b-dev-scan \
+                                  --network host \
+                                  zaproxy/zap-stable \
+                                  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18082 -r zap-report-dev.html -J zap-report-dev.json -I"
 
-								ls -la
-								test -f zap-report-dev.html
-								test -f zap-report-dev.json
-							'''
-						}
-					} else if (env.BRANCH_NAME == 'main') {
-						dir('service-a') {
-							sh '''
-								rm -f zap-report-prod.html zap-report-prod.json || true
-								docker rm -f zap-service-a-prod-scan || true
+                                docker start -a zap-service-b-dev-scan
 
-								docker create --name zap-service-a-prod-scan \
-								  --network host \
-								  zaproxy/zap-stable \
-								  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:28081 -r zap-report-prod.html -J zap-report-prod.json -I"
+                                docker cp zap-service-b-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
+                                docker cp zap-service-b-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
 
-								docker start -a zap-service-a-prod-scan
-								docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.html ./zap-report-prod.html
-								docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.json ./zap-report-prod.json
-								docker rm -f zap-service-a-prod-scan || true
+                                docker rm -f zap-service-b-dev-scan || true
 
-								ls -la
-								test -f zap-report-prod.html
-								test -f zap-report-prod.json
-							'''
-						}
-					} else {
-						echo "Skip ZAP scan for branch ${env.BRANCH_NAME}"
-					}
-				}
-			}
-		}
-		
+                                ls -la
+                                test -f zap-report-dev.html
+                                test -f zap-report-dev.json
+                            '''
+                        }
+                    } else if (env.BRANCH_NAME == 'main') {
+                        dir('service-b') {
+                            sh '''
+                                rm -f zap-report-prod.html zap-report-prod.json || true
+                                docker rm -f zap-service-b-prod-scan || true
+
+                                docker create --name zap-service-b-prod-scan \
+                                  --network host \
+                                  zaproxy/zap-stable \
+                                  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:28082 -r zap-report-prod.html -J zap-report-prod.json -I"
+
+                                docker start -a zap-service-b-prod-scan
+
+                                docker cp zap-service-b-prod-scan:/zap/wrk/zap-report-prod.html ./zap-report-prod.html
+                                docker cp zap-service-b-prod-scan:/zap/wrk/zap-report-prod.json ./zap-report-prod.json
+
+                                docker rm -f zap-service-b-prod-scan || true
+
+                                ls -la
+                                test -f zap-report-prod.html
+                                test -f zap-report-prod.json
+                            '''
+                        }
+                    } else {
+                        echo "Skip ZAP scan for branch ${env.BRANCH_NAME}"
+                    }
+                }
+            }
+        }
     }
-	
-	post {
-		always {
-			archiveArtifacts artifacts: 'service-a/trivy-image-report.txt, service-a/zap-report-dev.html, service-a/zap-report-dev.json, service-a/zap-report-prod.html, service-a/zap-report-prod.json', fingerprint: true
-		}
-	}
+
+    post {
+        always {
+            archiveArtifacts(
+                artifacts: 'service-b/trivy-image-report.txt,service-b/zap-report-dev.html,service-b/zap-report-dev.json,service-b/zap-report-prod.html,service-b/zap-report-prod.json',
+                fingerprint: true,
+                allowEmptyArchive: true
+            )
+        }
+    }
 }
