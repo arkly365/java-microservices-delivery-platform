@@ -6,7 +6,6 @@ pipeline {
         REGISTRY = 'localhost:5000'
         IMAGE_REPO = "${REGISTRY}/service-a"
 
-        // 這裡是 host port，可依你實際環境調整
         DEV_PORT  = '18081'
         PROD_PORT = '28081'
 
@@ -17,7 +16,7 @@ pipeline {
     stages {
         stage('Init') {
             steps {
-                echo "Start service-a pipeline"
+                echo "Pipeline started"
                 echo "Branch = ${env.BRANCH_NAME}"
             }
         }
@@ -27,11 +26,41 @@ pipeline {
                 sh 'git --version'
                 sh 'mvn -version'
                 sh 'docker --version'
-				sh 'docker compose version'
+                sh 'docker compose version'
             }
         }
 
-        stage('Build Jar') {
+        stage('Maven Test') {
+            steps {
+                dir('service-a') {
+                    sh 'mvn clean test'
+                }
+            }
+        }
+
+        stage('SonarQube Scan') {
+            steps {
+                dir('service-a') {
+                    withSonarQubeEnv('sonarqube-local') {
+                        sh '''
+                            mvn sonar:sonar \
+                              -Dsonar.projectKey=service-a \
+                              -Dsonar.projectName=service-a
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Maven Package') {
             steps {
                 dir('service-a') {
                     sh 'mvn clean package -DskipTests'
