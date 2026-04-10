@@ -176,6 +176,31 @@ pipeline {
                 '''
             }
         }
+		
+		stage('OWASP ZAP Baseline Scan') {
+			steps {
+				script {
+					if (env.BRANCH_NAME == 'develop') {
+						sh '''
+							docker run --rm \
+							  --network host \
+							  zaproxy/zap-stable \
+							  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -I"
+						'''
+					} else if (env.BRANCH_NAME == 'main') {
+						sh '''
+							docker run --rm \
+							  --network host \
+							  zaproxy/zap-stable \
+							  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:28081 -I"
+						'''
+					} else {
+						echo "Skip ZAP scan for branch ${env.BRANCH_NAME}"
+					}
+				}
+			}
+		}
+		
     }
 	
 	post {
