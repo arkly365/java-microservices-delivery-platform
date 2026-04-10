@@ -153,22 +153,13 @@ pipeline {
 				branch 'develop'
 			}
 			steps {
-				dir('service-a') {
-					sh '''
-						docker run --rm \
-						  -u root \
-						  --network host \
-						  -v "$PWD:/zap/wrk" \
-						  owasp/zap2docker-stable zap-baseline.py \
-						  -t http://host.docker.internal:18081 \
-						  -J zap-report-dev.json \
-						  -r zap-report-dev.html \
-						  -I
-					'''
-					sh 'ls -la'
-					sh 'test -f zap-report-dev.html'
-					sh 'test -f zap-report-dev.json'
-				}
+				sh '''
+					docker run --rm \
+					  --network host \
+					  zaproxy/zap-stable zap-baseline.py \
+					  -t http://host.docker.internal:18081 \
+					  -I
+				'''
 			}
 		}
 
