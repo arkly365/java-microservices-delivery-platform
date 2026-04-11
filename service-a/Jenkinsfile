@@ -218,6 +218,10 @@ pipeline {
                         } else {
                             deployTag = "build-${BUILD_NUMBER}"
                         }
+						
+						script {
+							input message: '⚠️ 確認要部署到 Production 嗎？', ok: 'Deploy'
+						}
 
                         sh """
                             docker rm -f service-a-prod || true
