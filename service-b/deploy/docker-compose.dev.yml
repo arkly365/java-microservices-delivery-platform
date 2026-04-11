@@ -1,11 +1,18 @@
 services:
-  sample-java-app-dev:
-    image: localhost:5000/sample-java-app:${IMAGE_TAG}
-    container_name: sample-java-app-dev
+  service-b-dev:
+    image: 127.0.0.1:5000/service-b:dev-${IMAGE_TAG:-latest}
+    container_name: service-b-dev
     ports:
-      - "8081:8080"
+      - "127.0.0.1:18082:8080"
     environment:
       APP_ENV: dev
       APP_BRANCH: ${APP_BRANCH}
-      APP_IMAGE_TAG: ${IMAGE_TAG}
+      APP_IMAGE_TAG: ${IMAGE_TAG:-latest}
     restart: unless-stopped
+    networks:
+      - lab-net
+
+networks:
+  lab-net:
+    external: true
+    name: jenkins-cicd-lab_lab-net
