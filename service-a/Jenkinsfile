@@ -174,7 +174,7 @@ pipeline {
                           --severity CRITICAL \
                           --ignore-unfixed \
                           --no-progress \
-                          --exit-code 0 \
+                          --exit-code 1 \
                           ${PROD_IMAGE_REPO}-build-${BUILD_NUMBER}
                     '''
                 }
