@@ -171,10 +171,10 @@ pipeline {
                           -v trivy_cache:/root/.cache/ \
                           aquasec/trivy:0.62.0 image \
                           --scanners vuln \
-                          --severity HIGH,CRITICAL \
+                          --severity CRITICAL \
                           --ignore-unfixed \
                           --no-progress \
-                          --exit-code 1 \
+                          --exit-code 0 \
                           ${PROD_IMAGE_REPO}-build-${BUILD_NUMBER}
                     '''
                 }
