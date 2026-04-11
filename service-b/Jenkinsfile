@@ -228,22 +228,22 @@ pipeline {
             steps {
                 script {
                     if (env.BRANCH_NAME == 'develop') {
-                        dir('service-a') {
+                        dir('service-b') {
                             sh '''
                                 rm -f zap-report-dev.html zap-report-dev.json || true
-                                docker rm -f zap-service-a-dev-scan || true
+                                docker rm -f zap-service-b-dev-scan || true
 
-                                docker create --name zap-service-a-dev-scan \
+                                docker create --name zap-service-b-dev-scan \
                                   --network host \
                                   zaproxy/zap-stable \
                                   sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r zap-report-dev.html -J zap-report-dev.json -I"
 
-                                docker start -a zap-service-a-dev-scan
+                                docker start -a zap-service-b-dev-scan
 
-                                docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
-                                docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
+                                docker cp zap-service-b-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
+                                docker cp zap-service-b-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
 
-                                docker rm -f zap-service-a-dev-scan || true
+                                docker rm -f zap-service-b-dev-scan || true
 
                                 ls -la
                                 test -f zap-report-dev.html
@@ -251,22 +251,22 @@ pipeline {
                             '''
                         }
                     } else if (env.BRANCH_NAME == 'main') {
-                        dir('service-a') {
+                        dir('service-b') {
                             sh '''
                                 rm -f zap-report-prod.html zap-report-prod.json || true
-                                docker rm -f zap-service-a-prod-scan || true
+                                docker rm -f zap-service-b-prod-scan || true
 
-                                docker create --name zap-service-a-prod-scan \
+                                docker create --name zap-service-b-prod-scan \
                                   --network host \
                                   zaproxy/zap-stable \
                                   sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:28081 -r zap-report-prod.html -J zap-report-prod.json -I"
 
-                                docker start -a zap-service-a-prod-scan
+                                docker start -a zap-service-b-prod-scan
 
-                                docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.html ./zap-report-prod.html
-                                docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.json ./zap-report-prod.json
+                                docker cp zap-service-b-prod-scan:/zap/wrk/zap-report-prod.html ./zap-report-prod.html
+                                docker cp zap-service-b-prod-scan:/zap/wrk/zap-report-prod.json ./zap-report-prod.json
 
-                                docker rm -f zap-service-a-prod-scan || true
+                                docker rm -f zap-service-b-prod-scan || true
 
                                 ls -la
                                 test -f zap-report-prod.html
