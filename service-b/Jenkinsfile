@@ -223,43 +223,53 @@ pipeline {
             }
         }
 
-        stage('OWASP ZAP Baseline Scan') {
-            steps {
-                dir('service-b') {
-                    script {
-                        if (env.BRANCH_NAME == 'develop') {
-                            sh '''
-                                docker run --rm \
-                                  --network host \
-                                  -v "$PWD:/zap/wrk:rw" \
-                                  ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-                                  -t http://host.docker.internal:18082/actuator/health \
-                                  -J zap-report-dev.json \
-                                  -r zap-report-dev.html \
-                                  -I
-                            '''
-                            sh 'test -f zap-report-dev.html'
-                            sh 'test -f zap-report-dev.json'
-                        } else if (env.BRANCH_NAME == 'main') {
-                            sh '''
-                                docker run --rm \
-                                  --network host \
-                                  -v "$PWD:/zap/wrk:rw" \
-                                  ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-                                  -t http://host.docker.internal:28082/actuator/health \
-                                  -J zap-report-prod.json \
-                                  -r zap-report-prod.html \
-                                  -I
-                            '''
-                            sh 'test -f zap-report-prod.html'
-                            sh 'test -f zap-report-prod.json'
-                        } else {
-                            echo "Skip ZAP for unsupported branch: ${env.BRANCH_NAME}"
-                        }
-                    }
-                }
-            }
-        }
+		stage('OWASP ZAP Baseline Scan') {
+			steps {
+				dir('service-b') {
+					script {
+						if (env.BRANCH_NAME == 'develop') {
+							sh '''
+								rm -f zap-report-dev.html zap-report-dev.json zap.yaml || true
+
+								docker run --rm \
+								  -u root \
+								  --network host \
+								  -v "$PWD:/zap/wrk:rw" \
+								  ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+								  -t http://host.docker.internal:18082/actuator/health \
+								  -J zap-report-dev.json \
+								  -r zap-report-dev.html \
+								  -I
+
+								test -f zap-report-dev.html
+								test -f zap-report-dev.json
+							'''
+						} else if (env.BRANCH_NAME == 'main') {
+							sh '''
+								rm -f zap-report-prod.html zap-report-prod.json zap.yaml || true
+
+								docker run --rm \
+								  -u root \
+								  --network host \
+								  -v "$PWD:/zap/wrk:rw" \
+								  ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+								  -t http://host.docker.internal:28082/actuator/health \
+								  -J zap-report-prod.json \
+								  -r zap-report-prod.html \
+								  -I
+
+								test -f zap-report-prod.html
+								test -f zap-report-prod.json
+							'''
+						} else {
+							echo "Skip ZAP for unsupported branch: ${env.BRANCH_NAME}"
+						}
+					}
+				}
+			}
+		}
+	
+	
     }
 
     post {
