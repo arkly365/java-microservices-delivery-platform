@@ -13,9 +13,9 @@ pipeline {
     }
 
     environment {
-        SERVICE_NAME = 'service-a'
-        REGISTRY_HOST = 'localhost'
-        REGISTRY_PORT = '5000'
+        SERVICE_NAME   = 'service-a'
+        REGISTRY_HOST  = 'localhost'
+        REGISTRY_PORT  = '5000'
         DEV_IMAGE_REPO = "${REGISTRY_HOST}:${REGISTRY_PORT}/${SERVICE_NAME}:dev"
         PROD_IMAGE_REPO = "${REGISTRY_HOST}:${REGISTRY_PORT}/${SERVICE_NAME}:prod"
     }
@@ -63,6 +63,12 @@ pipeline {
         }
 
         stage('Quality Gate') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { return !params.IMAGE_TAG?.trim() }
+                }
+            }
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
@@ -97,59 +103,83 @@ pipeline {
             }
         }
 
-		stage('Trivy Report') {
-			when {
-				expression { return !params.IMAGE_TAG?.trim() }
-			}
-			steps {
-				dir('service-a') {
-					script {
-						if (env.BRANCH_NAME == 'develop') {
-							sh '''
-								rm -f trivy-image-report.txt || true
-								docker run --rm \
-								  -v /var/run/docker.sock:/var/run/docker.sock \
-								  -v trivy_cache:/root/.cache/ \
-								  aquasec/trivy:0.62.0 image \
-								  --scanners vuln \
-								  --severity HIGH,CRITICAL \
-								  --ignore-unfixed \
-								  --no-progress \
-								  --format table \
-								  --exit-code 0 \
-								  ${DEV_IMAGE_REPO}-build-${BUILD_NUMBER} \
-								  > trivy-image-report.txt
+        stage('Trivy Report') {
+            when {
+                expression { return !params.IMAGE_TAG?.trim() }
+            }
+            steps {
+                dir('service-a') {
+                    script {
+                        if (env.BRANCH_NAME == 'develop') {
+                            sh '''
+                                rm -f trivy-image-report.txt || true
+                                docker run --rm \
+                                  -v /var/run/docker.sock:/var/run/docker.sock \
+                                  -v trivy_cache:/root/.cache/ \
+                                  aquasec/trivy:0.62.0 image \
+                                  --scanners vuln \
+                                  --severity HIGH,CRITICAL \
+                                  --ignore-unfixed \
+                                  --no-progress \
+                                  --format table \
+                                  --exit-code 0 \
+                                  ${DEV_IMAGE_REPO}-build-${BUILD_NUMBER} \
+                                  > trivy-image-report.txt
 
-								ls -la
-								test -f trivy-image-report.txt
-							'''
-						} else if (env.BRANCH_NAME == 'main') {
-							sh '''
-								rm -f trivy-image-report.txt || true
-								docker run --rm \
-								  -v /var/run/docker.sock:/var/run/docker.sock \
-								  -v trivy_cache:/root/.cache/ \
-								  aquasec/trivy:0.62.0 image \
-								  --scanners vuln \
-								  --severity HIGH,CRITICAL \
-								  --ignore-unfixed \
-								  --no-progress \
-								  --format table \
-								  --exit-code 0 \
-								  ${PROD_IMAGE_REPO}-build-${BUILD_NUMBER} \
-								  > trivy-image-report.txt
+                                ls -la
+                                test -f trivy-image-report.txt
+                            '''
+                        } else if (env.BRANCH_NAME == 'main') {
+                            sh '''
+                                rm -f trivy-image-report.txt || true
+                                docker run --rm \
+                                  -v /var/run/docker.sock:/var/run/docker.sock \
+                                  -v trivy_cache:/root/.cache/ \
+                                  aquasec/trivy:0.62.0 image \
+                                  --scanners vuln \
+                                  --severity HIGH,CRITICAL \
+                                  --ignore-unfixed \
+                                  --no-progress \
+                                  --format table \
+                                  --exit-code 0 \
+                                  ${PROD_IMAGE_REPO}-build-${BUILD_NUMBER} \
+                                  > trivy-image-report.txt
 
-								ls -la
-								test -f trivy-image-report.txt
-							'''
-						} else {
-							echo "Skip Trivy Report for unsupported branch: ${env.BRANCH_NAME}"
-						}
-					}
-				}
-			}
-		}
-		
+                                ls -la
+                                test -f trivy-image-report.txt
+                            '''
+                        } else {
+                            echo "Skip Trivy Report for unsupported branch: ${env.BRANCH_NAME}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Trivy Security Gate') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { return !params.IMAGE_TAG?.trim() }
+                }
+            }
+            steps {
+                dir('service-a') {
+                    sh '''
+                        docker run --rm \
+                          -v /var/run/docker.sock:/var/run/docker.sock \
+                          -v trivy_cache:/root/.cache/ \
+                          aquasec/trivy:0.62.0 image \
+                          --scanners vuln \
+                          --severity HIGH,CRITICAL \
+                          --ignore-unfixed \
+                          --no-progress \
+                          --exit-code 1 \
+                          ${PROD_IMAGE_REPO}-build-${BUILD_NUMBER}
+                    '''
+                }
+            }
+        }
 
         stage('Push Registry') {
             when {
@@ -227,10 +257,8 @@ pipeline {
                         } else {
                             deployTag = "build-${BUILD_NUMBER}"
                         }
-						
-						script {
-							input message: '⚠️ 確認要部署到 Production 嗎？', ok: 'Deploy'
-						}
+
+                        input message: '⚠️ 確認要部署到 Production 嗎？', ok: 'Deploy'
 
                         sh """
                             docker rm -f service-a-prod || true
@@ -252,67 +280,64 @@ pipeline {
             }
         }
 
-        
-		stage('OWASP ZAP Baseline Scan') {
-			options {
-				timeout(time: 10, unit: 'MINUTES')
-			}
-			steps {
-				script {
-					if (env.BRANCH_NAME == 'develop') {
-						dir('service-a') {
-							sh '''
-								rm -f zap-report-dev.html zap-report-dev.json || true
-								docker rm -f zap-service-a-dev-scan || true
+        stage('OWASP ZAP Baseline Scan') {
+            options {
+                timeout(time: 10, unit: 'MINUTES')
+            }
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'develop') {
+                        dir('service-a') {
+                            sh '''
+                                rm -f zap-report-dev.html zap-report-dev.json || true
+                                docker rm -f zap-service-a-dev-scan || true
 
-								docker create --name zap-service-a-dev-scan \
-								  --network host \
-								  zaproxy/zap-stable \
-								  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r zap-report-dev.html -J zap-report-dev.json -I"
+                                docker create --name zap-service-a-dev-scan \
+                                  --network host \
+                                  zaproxy/zap-stable \
+                                  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r zap-report-dev.html -J zap-report-dev.json -I"
 
-								docker start -a zap-service-a-dev-scan
+                                docker start -a zap-service-a-dev-scan
 
-								docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
-								docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
+                                docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
+                                docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
 
-								docker rm -f zap-service-a-dev-scan || true
+                                docker rm -f zap-service-a-dev-scan || true
 
-								ls -la
-								test -f zap-report-dev.html
-								test -f zap-report-dev.json
-							'''
-						}
-					} else if (env.BRANCH_NAME == 'main') {
-						dir('service-a') {
-							sh '''
-								rm -f zap-report-prod.html zap-report-prod.json || true
-								docker rm -f zap-service-a-prod-scan || true
+                                ls -la
+                                test -f zap-report-dev.html
+                                test -f zap-report-dev.json
+                            '''
+                        }
+                    } else if (env.BRANCH_NAME == 'main') {
+                        dir('service-a') {
+                            sh '''
+                                rm -f zap-report-prod.html zap-report-prod.json || true
+                                docker rm -f zap-service-a-prod-scan || true
 
-								docker create --name zap-service-a-prod-scan \
-								  --network host \
-								  zaproxy/zap-stable \
-								  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:28081 -r zap-report-prod.html -J zap-report-prod.json -I"
+                                docker create --name zap-service-a-prod-scan \
+                                  --network host \
+                                  zaproxy/zap-stable \
+                                  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:28081 -r zap-report-prod.html -J zap-report-prod.json -I"
 
-								docker start -a zap-service-a-prod-scan
+                                docker start -a zap-service-a-prod-scan
 
-								docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.html ./zap-report-prod.html
-								docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.json ./zap-report-prod.json
+                                docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.html ./zap-report-prod.html
+                                docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.json ./zap-report-prod.json
 
-								docker rm -f zap-service-a-prod-scan || true
+                                docker rm -f zap-service-a-prod-scan || true
 
-								ls -la
-								test -f zap-report-prod.html
-								test -f zap-report-prod.json
-							'''
-						}
-					} else {
-						echo "Skip ZAP scan for branch ${env.BRANCH_NAME}"
-					}
-				}
-			}
-		}
-				
-		
+                                ls -la
+                                test -f zap-report-prod.html
+                                test -f zap-report-prod.json
+                            '''
+                        }
+                    } else {
+                        echo "Skip ZAP scan for branch ${env.BRANCH_NAME}"
+                    }
+                }
+            }
+        }
     }
 
     post {
