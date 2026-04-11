@@ -1,23 +1,31 @@
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'IMAGE_TAG', defaultValue: '', description: '指定要重新 deploy / rollback 的版本，例如 build-22。留空時走本次 BUILD_NUMBER')
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timeout(time: 45, unit: 'MINUTES')
+    }
+
     environment {
         SERVICE_NAME = 'service-a'
-        REGISTRY     = 'localhost:5000'
-        IMAGE_REPO   = "${REGISTRY}/service-a"
-
-        DEV_PORT  = '18081'
-        PROD_PORT = '28081'
-
-        DEV_CONTAINER  = 'service-a-dev'
-        PROD_CONTAINER = 'service-a-prod'
+        REGISTRY_HOST = 'localhost'
+        REGISTRY_PORT = '5000'
+        DEV_IMAGE_REPO = "${REGISTRY_HOST}:${REGISTRY_PORT}/${SERVICE_NAME}:dev"
+        PROD_IMAGE_REPO = "${REGISTRY_HOST}:${REGISTRY_PORT}/${SERVICE_NAME}:prod"
     }
 
     stages {
         stage('Init') {
             steps {
-                echo "Pipeline started"
+                echo 'Pipeline started'
                 echo "Branch = ${env.BRANCH_NAME}"
+                echo "Input IMAGE_TAG = ${params.IMAGE_TAG}"
             }
         }
 
@@ -41,12 +49,14 @@ pipeline {
         stage('SonarQube Scan') {
             steps {
                 dir('service-a') {
-                    withSonarQubeEnv('sonarqube-local') {
-                        sh '''
-                            mvn sonar:sonar \
-                              -Dsonar.projectKey=service-a \
-                              -Dsonar.projectName=service-a
-                        '''
+                    retry(2) {
+                        withSonarQubeEnv('sonarqube-local') {
+                            sh '''
+                                mvn -B sonar:sonar \
+                                  -Dsonar.projectKey=service-a \
+                                  -Dsonar.projectName=service-a
+                            '''
+                        }
                     }
                 }
             }
@@ -54,7 +64,7 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 10, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -69,75 +79,117 @@ pipeline {
         }
 
         stage('Docker Build') {
+            when {
+                expression { return !params.IMAGE_TAG?.trim() }
+            }
             steps {
                 dir('service-a') {
-                    sh 'docker build -t service-a:ci-${BUILD_NUMBER} .'
+                    script {
+                        if (env.BRANCH_NAME == 'develop') {
+                            sh 'docker build -t ${DEV_IMAGE_REPO}-build-${BUILD_NUMBER} .'
+                        } else if (env.BRANCH_NAME == 'main') {
+                            sh 'docker build -t ${PROD_IMAGE_REPO}-build-${BUILD_NUMBER} .'
+                        } else {
+                            echo "Skip Docker Build for unsupported branch: ${env.BRANCH_NAME}"
+                        }
+                    }
                 }
             }
         }
 
         stage('Trivy Report') {
+            when {
+                expression { return !params.IMAGE_TAG?.trim() }
+            }
             steps {
                 dir('service-a') {
-                    sh '''
-                        docker run --rm \
-                          -v /var/run/docker.sock:/var/run/docker.sock \
-                          -v trivy_cache:/root/.cache/ \
-                          aquasec/trivy:0.62.0 image \
-                          --scanners vuln \
-                          --severity HIGH,CRITICAL \
-                          --ignore-unfixed \
-                          --no-progress \
-                          --format table \
-                          --exit-code 0 \
-                          service-a:ci-${BUILD_NUMBER} \
-                          > trivy-image-report.txt
-                    '''
-                    sh 'ls -la'
-                    sh 'test -f trivy-image-report.txt'
+                    script {
+                        if (env.BRANCH_NAME == 'develop') {
+                            sh '''
+                                docker run --rm \
+                                  -v /var/run/docker.sock:/var/run/docker.sock \
+                                  -v trivy_cache:/root/.cache/ \
+                                  aquasec/trivy:0.62.0 image \
+                                  --scanners vuln \
+                                  --severity HIGH,CRITICAL \
+                                  --ignore-unfixed \
+                                  --no-progress \
+                                  --format table \
+                                  --exit-code 0 \
+                                  ${DEV_IMAGE_REPO}-build-${BUILD_NUMBER} \
+                                  > trivy-image-report.txt
+                            '''
+                        } else if (env.BRANCH_NAME == 'main') {
+                            sh '''
+                                docker run --rm \
+                                  -v /var/run/docker.sock:/var/run/docker.sock \
+                                  -v trivy_cache:/root/.cache/ \
+                                  aquasec/trivy:0.62.0 image \
+                                  --scanners vuln \
+                                  --severity HIGH,CRITICAL \
+                                  --ignore-unfixed \
+                                  --no-progress \
+                                  --format table \
+                                  --exit-code 0 \
+                                  ${PROD_IMAGE_REPO}-build-${BUILD_NUMBER} \
+                                  > trivy-image-report.txt
+                            '''
+                        } else {
+                            echo "Skip Trivy Report for unsupported branch: ${env.BRANCH_NAME}"
+                        }
+                    }
                 }
             }
         }
 
-		stage('Push Registry') {
-			steps {
-				script {
-					if (env.BRANCH_NAME == 'develop') {
-						sh '''
-							docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:build-dev-${BUILD_NUMBER}
-							docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:dev-latest
-
-							docker push ${IMAGE_REPO}:build-dev-${BUILD_NUMBER}
-							docker push ${IMAGE_REPO}:dev-latest
-						'''
-					} else if (env.BRANCH_NAME == 'main') {
-						sh '''
-							docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:build-prod-${BUILD_NUMBER}
-							docker tag service-a:ci-${BUILD_NUMBER} ${IMAGE_REPO}:prod-latest
-
-							docker push ${IMAGE_REPO}:build-prod-${BUILD_NUMBER}
-							docker push ${IMAGE_REPO}:prod-latest
-						'''
-					} else {
-						echo "Skip push: unsupported branch ${env.BRANCH_NAME}"
-					}
-				}
-			}
-		}
+        stage('Push Registry') {
+            when {
+                expression { return !params.IMAGE_TAG?.trim() }
+            }
+            steps {
+                dir('service-a') {
+                    script {
+                        if (env.BRANCH_NAME == 'develop') {
+                            sh '''
+                                docker push ${DEV_IMAGE_REPO}-build-${BUILD_NUMBER}
+                                docker tag ${DEV_IMAGE_REPO}-build-${BUILD_NUMBER} ${DEV_IMAGE_REPO}-latest
+                                docker push ${DEV_IMAGE_REPO}-latest
+                            '''
+                        } else if (env.BRANCH_NAME == 'main') {
+                            sh '''
+                                docker push ${PROD_IMAGE_REPO}-build-${BUILD_NUMBER}
+                                docker tag ${PROD_IMAGE_REPO}-build-${BUILD_NUMBER} ${PROD_IMAGE_REPO}-latest
+                                docker push ${PROD_IMAGE_REPO}-latest
+                            '''
+                        } else {
+                            echo "Skip Push Registry for unsupported branch: ${env.BRANCH_NAME}"
+                        }
+                    }
+                }
+            }
+        }
 
         stage('Deploy Dev') {
             when {
                 branch 'develop'
             }
             steps {
-                sh '''
-                    docker rm -f ${DEV_CONTAINER} || true
+                dir('service-a') {
+                    script {
+                        def deployTag
+                        if (params.IMAGE_TAG?.trim()) {
+                            deployTag = params.IMAGE_TAG.trim()
+                            deployTag = deployTag.replaceFirst(/^dev-/, '')
+                        } else {
+                            deployTag = "build-${BUILD_NUMBER}"
+                        }
 
-                    docker run -d \
-                      --name ${DEV_CONTAINER} \
-                      -p ${DEV_PORT}:8080 \
-                      ${IMAGE_REPO}:dev-latest
-                '''
+                        sh """
+                            docker rm -f service-a-dev || true
+                            APP_BRANCH=develop IMAGE_TAG=${deployTag} docker compose -f deploy/docker-compose.dev.yml up -d
+                        """
+                    }
+                }
             }
         }
 
@@ -146,11 +198,9 @@ pipeline {
                 branch 'develop'
             }
             steps {
-                sh '''
-                    sleep 10
-                    curl -f http://host.docker.internal:${DEV_PORT}/hello
-                    curl -f http://host.docker.internal:${DEV_PORT}/actuator/health
-                '''
+                sh 'sleep 10'
+                sh 'curl -f http://host.docker.internal:18081/actuator/health'
+                sh 'curl -f http://host.docker.internal:18081/version'
             }
         }
 
@@ -159,14 +209,22 @@ pipeline {
                 branch 'main'
             }
             steps {
-                sh '''
-                    docker rm -f ${PROD_CONTAINER} || true
+                dir('service-a') {
+                    script {
+                        def deployTag
+                        if (params.IMAGE_TAG?.trim()) {
+                            deployTag = params.IMAGE_TAG.trim()
+                            deployTag = deployTag.replaceFirst(/^prod-/, '')
+                        } else {
+                            deployTag = "build-${BUILD_NUMBER}"
+                        }
 
-                    docker run -d \
-                      --name ${PROD_CONTAINER} \
-                      -p ${PROD_PORT}:8080 \
-                      ${IMAGE_REPO}:prod-latest
-                '''
+                        sh """
+                            docker rm -f service-a-prod || true
+                            APP_BRANCH=main IMAGE_TAG=${deployTag} docker compose -f deploy/docker-compose.prod.yml up -d
+                        """
+                    }
+                }
             }
         }
 
@@ -175,65 +233,51 @@ pipeline {
                 branch 'main'
             }
             steps {
-                sh '''
-                    sleep 10
-                    curl -f http://host.docker.internal:${PROD_PORT}/hello
-                    curl -f http://host.docker.internal:${PROD_PORT}/actuator/health
-                '''
+                sh 'sleep 10'
+                sh 'curl -f http://host.docker.internal:28081/actuator/health'
+                sh 'curl -f http://host.docker.internal:28081/version'
             }
         }
 
         stage('OWASP ZAP Baseline Scan') {
             steps {
-                script {
-                    if (env.BRANCH_NAME == 'develop') {
-                        dir('service-a') {
+                dir('service-a') {
+                    script {
+                        if (env.BRANCH_NAME == 'develop') {
                             sh '''
-                                rm -f zap-report-dev.html zap-report-dev.json || true
-                                docker rm -f zap-service-a-dev-scan || true
+                                rm -f zap-report-dev.html zap-report-dev.json zap.yaml || true
 
-                                docker create --name zap-service-a-dev-scan \
+                                docker run --rm \
                                   --network host \
-                                  zaproxy/zap-stable \
-                                  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:18081 -r zap-report-dev.html -J zap-report-dev.json -I"
+                                  -v "$PWD:/zap/wrk:rw" \
+                                  ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+                                  -t http://host.docker.internal:18081/actuator/health \
+                                  -J zap-report-dev.json \
+                                  -r zap-report-dev.html \
+                                  -I || true
 
-                                docker start -a zap-service-a-dev-scan
-
-                                docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.html ./zap-report-dev.html
-                                docker cp zap-service-a-dev-scan:/zap/wrk/zap-report-dev.json ./zap-report-dev.json
-
-                                docker rm -f zap-service-a-dev-scan || true
-
-                                ls -la
                                 test -f zap-report-dev.html
                                 test -f zap-report-dev.json
                             '''
-                        }
-                    } else if (env.BRANCH_NAME == 'main') {
-                        dir('service-a') {
+                        } else if (env.BRANCH_NAME == 'main') {
                             sh '''
-                                rm -f zap-report-prod.html zap-report-prod.json || true
-                                docker rm -f zap-service-a-prod-scan || true
+                                rm -f zap-report-prod.html zap-report-prod.json zap.yaml || true
 
-                                docker create --name zap-service-a-prod-scan \
+                                docker run --rm \
                                   --network host \
-                                  zaproxy/zap-stable \
-                                  sh -c "mkdir -p /zap/wrk && zap-baseline.py -t http://host.docker.internal:28081 -r zap-report-prod.html -J zap-report-prod.json -I"
+                                  -v "$PWD:/zap/wrk:rw" \
+                                  ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+                                  -t http://host.docker.internal:28081/actuator/health \
+                                  -J zap-report-prod.json \
+                                  -r zap-report-prod.html \
+                                  -I || true
 
-                                docker start -a zap-service-a-prod-scan
-
-                                docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.html ./zap-report-prod.html
-                                docker cp zap-service-a-prod-scan:/zap/wrk/zap-report-prod.json ./zap-report-prod.json
-
-                                docker rm -f zap-service-a-prod-scan || true
-
-                                ls -la
                                 test -f zap-report-prod.html
                                 test -f zap-report-prod.json
                             '''
+                        } else {
+                            echo "Skip ZAP for unsupported branch: ${env.BRANCH_NAME}"
                         }
-                    } else {
-                        echo "Skip ZAP scan for branch ${env.BRANCH_NAME}"
                     }
                 }
             }
@@ -242,11 +286,8 @@ pipeline {
 
     post {
         always {
-            archiveArtifacts(
-                artifacts: 'service-a/trivy-image-report.txt,service-a/zap-report-dev.html,service-a/zap-report-dev.json,service-a/zap-report-prod.html,service-a/zap-report-prod.json',
-                fingerprint: true,
-                allowEmptyArchive: true
-            )
+            archiveArtifacts artifacts: 'service-a/trivy-image-report.txt', fingerprint: true, allowEmptyArchive: true
+            archiveArtifacts artifacts: 'service-a/zap-report-dev.html,service-a/zap-report-dev.json,service-a/zap-report-prod.html,service-a/zap-report-prod.json', fingerprint: true, allowEmptyArchive: true
         }
     }
 }
