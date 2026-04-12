@@ -2,6 +2,17 @@
 
 ---
 
+# 🎯 Project Motivation
+
+在傳統 Java 專案中，常見以下問題：  
+
+- CI/CD 流程分散（build / test / deploy / scan 各自為政）  
+- 缺乏安全掃描整合（SAST / Container / DAST）  
+- 缺乏 artifact 與 image 版本管理  
+- 部署後缺乏驗證機制（health / version / API）
+
+---
+
 ## 📌 專案介紹
 
 本專案為一套 **Microservices CI/CD + DevSecOps Pipeline 實作 Lab**，  
@@ -78,6 +89,56 @@ flowchart TD
 
 ---
 
+# ⚡ Quick Start
+
+## Prerequisites
+
+- Docker Desktop
+- Java 17
+- Maven
+- Jenkins (Docker)
+- SonarQube (Docker)
+
+---
+
+## ## 1. Clone Repository
+
+git clone https://github.com/arkly365/java-microservices-delivery-platform.git  
+cd java-microservices-delivery-platform
+
+---
+
+## 2. 啟動基礎服務
+
+docker compose up -d
+
+包含：
+
+- Jenkins
+- SonarQube
+- Private Registry
+
+---
+
+## 3. 觸發 Pipeline
+
+- Push 到 `develop` 或 `main`
+- 或手動在 Jenkins 點擊 Build
+
+---
+
+## 4. 驗證服務
+
+### Dev
+
+curl http://localhost:8081/actuator/health
+
+### Prod
+
+curl http://localhost:8082/actuator/health
+
+---
+
 ## 🚀 Pipeline 流程
 
 完整 CI/CD + DevSecOps 流程如下：
@@ -145,6 +206,55 @@ flowchart TD
 - SonarQube Quality Gate（Code Level）
 - Trivy Security Gate（Image Level）
 
+    不安全 → 不可發布
+
+---
+
+# 🧠 Design Decisions
+
+## 為什麼使用 Docker Compose
+
+- 快速建置
+- 易於除錯
+- 降低複雜度
+
+---
+
+## 為什麼使用 Private Registry
+
+- 模擬企業內部 artifact repository
+- 支援版本控管與 rollback
+
+---
+
+## 為什麼 Trivy 分離 Report / Gate
+
+- 避免報告與阻擋邏輯混在一起
+- 提升 pipeline 可讀性
+
+---
+
+## 為什麼先用 docker run 部署
+
+- 最小可行驗證
+- 易於 debug
+
+---
+
+## Branch-based Deployment
+
+- develop → dev（8081）
+- main → prod（8082）
+
+---
+
+# 📸 Screenshots
+
+docs/images/jenkins-pipeline.png  
+docs/images/sonarqube.png  
+docs/images/trivy.png  
+docs/images/zap-scanning_report.png
+
 ---
 
 ## 🌟 專案亮點
@@ -181,9 +291,10 @@ flowchart TD
 ### 🔹 5. Deployment Verification
 
 - `/health`
-- `/version`
 
- 不只是 deploy，而是「可驗證交付」
+- `/version`
+  
+  不只是 deploy，而是「可驗證交付」
 
 ---
 
@@ -222,15 +333,48 @@ flowchart TD
 
 ---
 
-## 🧪 驗證方式
+# 🎬 Demo Script
 
-### Dev 環境
+## Step 1
 
-http://localhost:8081/actuator/health
+git push origin develop
 
-### Prod 環境
+## Step 2
 
-http://localhost:8082/actuator/health
+Jenkins 自動執行：
+
+- Build
+- Scan
+- Deploy
+
+## Step 3
+
+curl http://localhost:8081/actuator/health
+
+## Step 4
+
+查看：
+
+- Trivy report
+- ZAP report
+
+---
+
+# Limitations
+
+- 本專案為本機 Lab
+- 未導入 Kubernetes / Helm
+- ZAP 採 baseline scan
+- 未整合 Observability
+
+---
+
+# 👨‍💻 Role
+
+- Sole Developer / DevOps Engineer
+- 設計並實作 CI/CD Pipeline
+- 整合 DevSecOps 工具鏈
+- 建立 container-based deployment flow
 
 ---
 
