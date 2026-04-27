@@ -24,9 +24,10 @@ public class HelloController {
     public Map<String, Object> hello() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("service", "service-a");
-		result.put("message", "Hello from service-a-3");
+		result.put("message", "Hello from service-a");
         result.put("environment", environment);
         result.put("branch", branch);
+        result.put("name", "小華");
         result.put("imageTag", imageTag);
         
         return result;
